@@ -1,0 +1,7 @@
+hosts:
+    - example:
+        url: example.com
+        port: 443
+    - another:
+        url: another.example.com
+        port: 443
