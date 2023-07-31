@@ -1,4 +1,4 @@
-module certinfo
+module github.com/C3S/certinfo
 
 go 1.18
 
