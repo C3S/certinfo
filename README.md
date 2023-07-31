@@ -38,7 +38,7 @@ sudo apt install golang-go
 Then check out the source code:
 
 ```bash
-git clone gitolite3@git.c3s.cc:certinfo
+git clone git@github.com:C3S/certinfo.git
 cd certinfo
 # fetch dependencies
 go get .
