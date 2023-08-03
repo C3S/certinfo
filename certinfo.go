@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -20,8 +21,24 @@ type Host struct {
 	Port int    `mapstructure:"port"`
 }
 
+type OddEvenKeys struct {
+	Odd  []string
+	Even []string
+}
+
 var (
-	allHosts map[string]*Host
+	allHosts   map[string]*Host
+	days       = 14
+	port       = 443
+	IPversions = [2]int{4, 6}
+	timeout    = 5
+	showErrors = true
+	blue       = color.New(color.FgBlue).SprintFunc()
+	magenta    = color.New(color.FgMagenta).SprintFunc()
+	green      = color.New(color.FgGreen).SprintFunc()
+	orange     = color.New(color.FgYellow).SprintFunc()
+	red        = color.New(color.FgRed).SprintFunc()
+	// var yellow = color.New(color.FgHiYellow).SprintFunc()
 )
 
 func dialTimeout(sec int) time.Duration {
@@ -66,27 +83,98 @@ func sortKeys(hosts map[string]*Host) []string {
 	return keys
 }
 
+func bestBefore(
+	keys []string,
+	allHosts map[string]*Host,
+	IPversions [2]int,
+	timeout int,
+	confTLS *tls.Config,
+	now time.Time,
+) {
+	for _, i := range keys {
+		for _, j := range IPversions {
+			conn, err := tls.DialWithDialer(
+				&net.Dialer{Timeout: dialTimeout(timeout)},
+				"tcp"+strconv.Itoa(j),
+				allHosts[i].URL+":"+strconv.Itoa(allHosts[i].Port),
+				confTLS,
+			)
+			if err != nil {
+				if showErrors {
+					log.Printf(
+						"%-35s %s: %s %s",
+						blue(allHosts[i].URL),
+						"(IPv"+strconv.Itoa(j)+")",
+						red("Error during dial:"),
+						orange(err),
+					)
+				}
+				continue
+			}
+			defer conn.Close()
+			certs := conn.ConnectionState().PeerCertificates
+			certExpires := certs[0].NotAfter
+			daysValid := int(certExpires.Sub(now).Hours() / 24)
+			if daysValid > days {
+				fmt.Printf(
+					"%-35s (IPv%d): expires %-44s %s",
+					blue(allHosts[i].URL),
+					j,
+					green(certs[0].NotAfter.Format("02.01.2006"))+", in "+green(strconv.Itoa(daysValid))+" days",
+					green("-- ok!\n"),
+				)
+				continue
+			} else if daysValid < 0 {
+				fmt.Printf(
+					"%-35s (IPv%d): expired %-44s %s",
+					blue(allHosts[i].URL),
+					j,
+					red(certs[0].NotAfter.Format("02.01.2006"))+", "+red(strconv.Itoa(daysValid))+" days ago",
+					red("-- red alert!\n"),
+				)
+				continue
+			} else {
+				fmt.Printf(
+					"%-35s (IPv%d): expires %-44s %s",
+					blue(allHosts[i].URL),
+					j,
+					orange(certs[0].NotAfter.Format("02.01.2006"))+", in "+orange(strconv.Itoa(daysValid))+" days",
+					orange("-- please renew!\n"),
+				)
+				continue
+			}
+		}
+	}
+}
+
+
+// split keys in two halves alternating
+func oddEvenSplit(keys []string) OddEvenKeys {
+	var oddKeys []string
+	var evenKeys []string
+	for x := 0; x <= len(keys)-1; x++ {
+		if x%2 != 0 {
+			oddKeys = append(oddKeys, keys[x])
+		} else {
+			evenKeys = append(evenKeys, keys[x])
+		}
+	}
+	result := OddEvenKeys{
+		Odd: oddKeys,
+		Even: evenKeys,
+	}
+	return(result)
+}
+
+
 func main() {
 
 	confTLS := &tls.Config{
 		InsecureSkipVerify: true,
 	}
 
-	days := 14
-	port := 443
-	IPversions := [2]int{4, 6}
 	// set default protocol to IPv6
 	protocol := IPversions[1]
-	timeout := 5
-	showErrors := true
-
-	// colorful output
-	blue := color.New(color.FgBlue).SprintFunc()
-	magenta := color.New(color.FgMagenta).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	orange := color.New(color.FgYellow).SprintFunc()
-	// yellow := color.New(color.FgHiYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
 
 	rootCmd := &cobra.Command{Use: "certinfo"}
 
@@ -240,60 +328,28 @@ func main() {
 			loc, _ := time.LoadLocation("UTC")
 			now := time.Now().In(loc)
 			keys := sortKeys(allHosts)
-			for _, i := range keys {
-				for _, j := range IPversions {
-					conn, err := tls.DialWithDialer(
-						&net.Dialer{Timeout: dialTimeout(timeout)},
-						"tcp"+strconv.Itoa(j),
-						allHosts[i].URL+":"+strconv.Itoa(allHosts[i].Port),
-						confTLS,
-					)
-					if err != nil {
-						if showErrors {
-							log.Printf(
-								"%-35s %s: %s %s",
-								blue(allHosts[i].URL),
-								"(IPv"+strconv.Itoa(j)+")",
-								red("Error during dial:"),
-								orange(err),
-							)
-						}
-						continue
-					}
-					defer conn.Close()
-					certs := conn.ConnectionState().PeerCertificates
-					certExpires := certs[0].NotAfter
-					daysValid := int(certExpires.Sub(now).Hours() / 24)
-					if daysValid > days {
-						fmt.Printf(
-							"%-35s (IPv%d): expires %-44s %s",
-							blue(allHosts[i].URL),
-							j,
-							green(certs[0].NotAfter.Format("02.01.2006"))+", in "+green(strconv.Itoa(daysValid))+" days",
-							green("-- ok!\n"),
-						)
-						continue
-					} else if daysValid < 0 {
-						fmt.Printf(
-							"%-35s (IPv%d): expired %-44s %s",
-							blue(allHosts[i].URL),
-							j,
-							red(certs[0].NotAfter.Format("02.01.2006"))+", "+red(strconv.Itoa(daysValid))+" days ago",
-							red("-- red alert!\n"),
-						)
-						continue
-					} else {
-						fmt.Printf(
-							"%-35s (IPv%d): expires %-44s %s",
-							blue(allHosts[i].URL),
-							j,
-							orange(certs[0].NotAfter.Format("02.01.2006"))+", in "+orange(strconv.Itoa(daysValid))+" days",
-							orange("-- please renew!\n"),
-						)
-						continue
-					}
-				}
-			}
+			splitKeys := oddEvenSplit(keys)
+			splitKeysOdd := oddEvenSplit(splitKeys.Odd)
+			splitKeysEven := oddEvenSplit(splitKeys.Even)
+			wg := new(sync.WaitGroup)
+			wg.Add(4)
+			go func(wg *sync.WaitGroup) {
+				bestBefore(splitKeysOdd.Odd, allHosts, IPversions, timeout, confTLS, now)
+				wg.Done()
+			}(wg)
+			go func(wg *sync.WaitGroup) {
+				bestBefore(splitKeysOdd.Even, allHosts, IPversions, timeout, confTLS, now)
+				wg.Done()
+			}(wg)
+			go func(wg *sync.WaitGroup) {
+				bestBefore(splitKeysEven.Odd, allHosts, IPversions, timeout, confTLS, now)
+				wg.Done()
+			}(wg)
+			go func(wg *sync.WaitGroup) {
+				bestBefore(splitKeysEven.Even, allHosts, IPversions, timeout, confTLS, now)
+				wg.Done()
+			}(wg)
+			wg.Wait()
 		},
 	}
 
@@ -302,7 +358,7 @@ func main() {
 	rootCmd.PersistentFlags().IntVarP(&protocol, "protocol", "i", protocol, "the IP protocol version to use")
 	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", timeout, "the timout for dials in seconds")
 	rootCmd.PersistentFlags().BoolVarP(&showErrors, "errors", "e", false, "show all dial errors, not only resolved hosts")
-	rootCmd.PersistentFlags().StringP("config", "c","", "config file (defaults to ./config.yaml or ~/.config/certinfo/config.yaml")
+	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (defaults to ./config.yaml or ~/.config/certinfo/config.yaml")
 	rootCmd.AddCommand(cmdListHosts)
 	rootCmd.AddCommand(cmdExpires)
 	rootCmd.AddCommand(cmdExpiresHosts)
