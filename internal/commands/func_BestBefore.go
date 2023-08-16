@@ -22,12 +22,14 @@ func BestBefore(args []string, protocol int, confTLS *tls.Config) {
 
 	thisProtocol := [2]int{protocol, 0}
 
-	bestBeforeCheck(
-		thisKey,
-		allHosts,
-		thisProtocol,
-		Timeout,
-		confTLS,
-		now,
+	daysLeft := daysValid(
+	  thisKey,
+	  allHosts,
+	  thisProtocol,
+	  Timeout,
+	  confTLS,
+	  now,
 	)
+
+	bestBeforeCheck(daysLeft)
 }

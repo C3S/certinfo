@@ -18,19 +18,23 @@ func BestBeforeHosts(confTLS *tls.Config) {
 	wg := new(sync.WaitGroup)
 	wg.Add(4)
 	go func(wg *sync.WaitGroup) {
-		bestBeforeCheck(splitKeysOdd.Odd, AllHosts, IPversions, Timeout, confTLS, now)
+		daysLeft := daysValid(splitKeysOdd.Odd, AllHosts, IPversions, Timeout, confTLS, now)
+		bestBeforeCheck(daysLeft)
 		wg.Done()
 	}(wg)
 	go func(wg *sync.WaitGroup) {
-		bestBeforeCheck(splitKeysOdd.Even, AllHosts, IPversions, Timeout, confTLS, now)
+		daysLeft := daysValid(splitKeysOdd.Even, AllHosts, IPversions, Timeout, confTLS, now)
+		bestBeforeCheck(daysLeft)
 		wg.Done()
 	}(wg)
 	go func(wg *sync.WaitGroup) {
-		bestBeforeCheck(splitKeysEven.Odd, AllHosts, IPversions, Timeout, confTLS, now)
+		daysLeft := daysValid(splitKeysEven.Odd, AllHosts, IPversions, Timeout, confTLS, now)
+		bestBeforeCheck(daysLeft)
 		wg.Done()
 	}(wg)
 	go func(wg *sync.WaitGroup) {
-		bestBeforeCheck(splitKeysEven.Even, AllHosts, IPversions, Timeout, confTLS, now)
+		daysLeft := daysValid(splitKeysEven.Even, AllHosts, IPversions, Timeout, confTLS, now)
+		bestBeforeCheck(daysLeft)
 		wg.Done()
 	}(wg)
 	wg.Wait()
