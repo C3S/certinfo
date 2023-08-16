@@ -6,8 +6,8 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"time"
 
-	"github.com/C3S/certinfo/internal/dial"
 	. "github.com/C3S/certinfo/internal/globals"
 )
 
@@ -19,7 +19,7 @@ func getCerts(
 	confTLS *tls.Config,
 ) []*x509.Certificate {
 	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: dial.DialTimeout(timeout)},
+		&net.Dialer{Timeout: time.Duration(timeout) * time.Second},
 		"tcp"+strconv.Itoa(protocol),
 		url+":"+strconv.Itoa(port),
 		confTLS,
