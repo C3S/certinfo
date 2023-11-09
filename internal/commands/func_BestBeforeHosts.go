@@ -18,7 +18,7 @@ func workerDaysValid(
 	confTLS *tls.Config,
 ) {
 	for j := range jobs {
-		thisKey := []string{keys[j-1]}
+		thisKey := []string{keys[j]}
 		results <- daysValid(thisKey, AllHosts, IPversions, Timeout, confTLS, now)
 		bar.Add(1)
 	}
@@ -48,7 +48,7 @@ func BestBeforeHosts(
 		}()
 	}
 
-	for j := 1; j <= nKeys; j++ {
+	for j := 0; j < nKeys; j++ {
 		jobs <- j
 	}
 	close(jobs)
